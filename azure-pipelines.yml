@@ -1,0 +1,26 @@
+trigger:
+- main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  kvName: 'kv-demo-atul'
+  secretName: 'dbPassword'
+
+steps:
+- task: AzureCLI@2
+  name: FetchSecret
+  inputs:
+    azureSubscription: 'SERVICE-CONNECTION-NAME'
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+      echo "Fetching secret from Key Vault..."
+      secretValue=$(az keyvault secret show --vault-name $kvName --name $secretName --query value -o tsv)
+      echo $secretValue > secret.txt
+
+- task: PublishPipelineArtifact@1
+  inputs:
+    targetPath: 'secret.txt'
+    artifact: 'keyvault-secret'
