@@ -1,170 +1,299 @@
-# Azure-Key-Vault
-Azure Key Vault Project
+# 🚀 **AZURE KEY VAULT – COMPLETE CODE & SNIPPET COLLECTION**
 
-Here is a detailed guide to creating and using **Azure Key Vault** in a project, including steps and example code. This project demonstrates securely storing secrets and accessing them via an application.
+Includes:
 
----
-
-### **Project: Using Azure Key Vault to Secure Application Secrets**
-
-#### **Objective**
-- Store sensitive data (e.g., API keys, passwords) in Azure Key Vault.
-- Access secrets securely in an application using Azure SDK.
-
----
-
-### **Steps**
-
-#### **1. Prerequisites**
-- **Azure Account**: Ensure you have access to Azure.
-- **Azure CLI**: Installed and configured on your machine.
-- **Azure SDK**: Relevant SDK for your application language (e.g., Python, .NET).
-- **Resource Group**: Create one if you don’t have it already.
+1. **Create Key Vault (CLI, ARM, PowerShell)**
+2. **Publish Secret as Artifact using YAML Pipeline**
+3. **Use Key Vault secret in Variable Group**
+4. **Access Key Vault Secret in ARM Template**
+5. **Key Vault with Azure Data Factory**
+6. **Access Secret from Key Vault in Azure Pipeline (Service Connection + RBAC)**
+7. **Latest Key Vault UI Changes**
+8. **Tests & verification**
 
 ---
 
-#### **2. Create an Azure Key Vault**
+# 1️⃣ **Create Azure Key Vault – Commands**
 
-Run the following commands to create a Key Vault:
+## **Azure CLI**
 
 ```bash
-# Login to Azure
-az login
+az group create -n rg-kv-demo -l eastus
 
-# Set your subscription (if you have multiple subscriptions)
-az account set --subscription "<SUBSCRIPTION_ID>"
+az keyvault create \
+  -n kv-demo-atul \
+  -g rg-kv-demo \
+  --sku standard
 
-# Create a resource group (if not created)
-az group create --name MyResourceGroup --location eastus
+az keyvault secret set \
+  --name dbPassword \
+  --vault-name kv-demo-atul \
+  --value "P@ssword123!"
+```
 
-# Create the Key Vault
-az keyvault create --name MyKeyVault --resource-group MyResourceGroup --location eastus
+## **PowerShell**
+
+```powershell
+New-AzResourceGroup -Name rg-kv-demo -Location eastus
+New-AzKeyVault -Name kv-demo-atul -ResourceGroupName rg-kv-demo -Location eastus
+
+Set-AzKeyVaultSecret -VaultName kv-demo-atul -Name "dbPassword" -SecretValue (ConvertTo-SecureString "P@ssword123!" -AsPlainText -Force)
 ```
 
 ---
 
-#### **3. Add Secrets to Key Vault**
+# 2️⃣ **Publish Key Vault Secret as Artifact using Azure DevOps YAML Pipeline**
 
-Add secrets to the Key Vault:
+### **Goal:**
 
-```bash
-# Add a secret
-az keyvault secret set --vault-name MyKeyVault --name "MySecretName" --value "MySecretValue"
+Fetch secret → Write to file → Publish as pipeline artifact.
 
-# List all secrets
-az keyvault secret list --vault-name MyKeyVault
+### **azure-pipelines.yml**
+
+```yaml
+trigger:
+- main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  kvName: 'kv-demo-atul'
+  secretName: 'dbPassword'
+
+steps:
+- task: AzureCLI@2
+  name: FetchSecret
+  inputs:
+    azureSubscription: 'SERVICE-CONNECTION-NAME'
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+      echo "Fetching secret from Key Vault..."
+      secretValue=$(az keyvault secret show --vault-name $kvName --name $secretName --query value -o tsv)
+      echo $secretValue > secret.txt
+
+- task: PublishPipelineArtifact@1
+  inputs:
+    targetPath: 'secret.txt'
+    artifact: 'keyvault-secret'
 ```
 
 ---
 
-#### **4. Configure Access Policies**
+# 3️⃣ **Define Secret as Variable in Variable Group (Azure DevOps)**
 
-Grant your application or user access to the Key Vault:
+### **Step-by-step**
 
-```bash
-# Grant access to a specific user or app
-az keyvault set-policy --name MyKeyVault --upn "user@domain.com" --secret-permissions get list
-```
+1. Go to **Pipelines → Library → Variable Group → + Add variable group**
+2. Enable **Link secrets from Azure Key Vault**
+3. Select:
 
-For service principals or managed identities:
+   * Your Subscription
+   * Your Key Vault (`kv-demo-atul`)
+4. Choose secrets to include
 
-```bash
-az keyvault set-policy --name MyKeyVault --spn "<SERVICE_PRINCIPAL_ID>" --secret-permissions get list
-```
+### **Use in YAML**
 
----
+```yaml
+variables:
+- group: kv-variable-group-demo
 
-#### **5. Access Key Vault in Code**
-
-Below are examples for Python and .NET.
-
----
-
-##### **Python Code**
-
-Install the Azure Key Vault SDK:
-
-```bash
-pip install azure-identity azure-keyvault-secrets
-```
-
-**Code Example:**
-
-```python
-from azure.identity import DefaultAzureCredential
-from azure.keyvault.secrets import SecretClient
-
-# Key Vault URL
-key_vault_url = "https://MyKeyVault.vault.azure.net/"
-
-# Authenticate with DefaultAzureCredential
-credential = DefaultAzureCredential()
-client = SecretClient(vault_url=key_vault_url, credential=credential)
-
-# Retrieve a secret
-secret_name = "MySecretName"
-retrieved_secret = client.get_secret(secret_name)
-print(f"Secret Value: {retrieved_secret.value}")
+steps:
+- script: |
+    echo "Azure Key Vault Secret: $(dbPassword)"
 ```
 
 ---
 
-##### **.NET Code (C#)**
+# 4️⃣ **Access Key Vault Secret in ARM Template**
 
-Install the Azure SDK for .NET:
+### **arm-template.json**
 
-```bash
-dotnet add package Azure.Identity
-dotnet add package Azure.Security.KeyVault.Secrets
-```
-
-**Code Example:**
-
-```csharp
-using System;
-using Azure.Identity;
-using Azure.Security.KeyVault.Secrets;
-
-class Program
+```json
 {
-    static void Main(string[] args)
-    {
-        string keyVaultUrl = "https://MyKeyVault.vault.azure.net/";
-        string secretName = "MySecretName";
-
-        var client = new SecretClient(new Uri(keyVaultUrl), new DefaultAzureCredential());
-        KeyVaultSecret secret = client.GetSecret(secretName);
-
-        Console.WriteLine($"Secret Value: {secret.Value}");
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "kvName": {
+      "type": "string"
+    },
+    "secretName": {
+      "type": "string"
     }
+  },
+  "resources": [],
+  "outputs": {
+    "secretValue": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.KeyVault/vaults/secrets', parameters('kvName'), parameters('secretName')), '2019-09-01').value]"
+    }
+  }
+}
+```
+
+### **Deployment**
+
+```bash
+az deployment group create \
+  -g rg-kv-demo \
+  --template-file arm-template.json \
+  --parameters kvName=kv-demo-atul secretName=dbPassword
+```
+
+---
+
+# 5️⃣ **Azure Key Vault with Azure Data Factory**
+
+## **Create Linked Service with Key Vault Integration**
+
+### **linkedService.json**
+
+```json
+{
+  "name": "AzureSqlDatabaseLS",
+  "type": "Microsoft.DataFactory/factories/linkedservices",
+  "properties": {
+    "type": "AzureSqlDatabase",
+    "typeProperties": {
+      "connectionString": "Server=tcp:sql-demo.database.windows.net;Database=dbdemo;",
+      "password": {
+        "type": "AzureKeyVaultSecret",
+        "store": {
+          "referenceName": "KeyVaultLS",
+          "type": "LinkedServiceReference"
+        },
+        "secretName": "dbPassword"
+      }
+    }
+  }
+}
+```
+
+### **Create Key Vault Linked Service**
+
+```json
+{
+  "name": "KeyVaultLS",
+  "type": "Microsoft.DataFactory/factories/linkedservices",
+  "properties": {
+    "type": "AzureKeyVault",
+    "typeProperties": {
+      "baseUrl": "https://kv-demo-atul.vault.azure.net/"
+    }
+  }
 }
 ```
 
 ---
 
-#### **6. Test Your Application**
+# 6️⃣ **Access Secret from Azure Key Vault using Azure Pipeline**
 
-Run the application and verify that it fetches the secret value from Azure Key Vault.
+## **YAML Pipeline**
+
+```yaml
+trigger:
+- main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  - name: keyVaultName
+    value: kv-demo-atul
+
+steps:
+- task: AzureKeyVault@2
+  inputs:
+    azureSubscription: 'SERVICE-CONNECTION-NAME'
+    KeyVaultName: '$(keyVaultName)'
+    SecretsFilter: '*'
+    RunAsPreJob: false
+
+- script: |
+    echo "DB Password: $(dbPassword)"
+```
+
+✔ Automatically maps all secrets as variables
+✔ Secret names = pipeline variable names
 
 ---
 
-#### **7. Secure Access with Managed Identity (Optional)**
+# 7️⃣ **Important Key Vault UI Update (2024–2025)**
 
-To eliminate the need for client secrets or keys, configure **Managed Identity** for your application:
+### **✔ New UI Changes**
 
-- **Enable Managed Identity** for your Azure resource (e.g., VM, App Service).
-- Add the Managed Identity to the Key Vault's access policy:
+* **Secrets, Keys, Certificates now under “Object” section**
+* “Generate/Import” button replaced with **“Create”**
+* Access Policies moved under:
+  **Settings → Access configuration**
+* Now strongly recommends **Azure RBAC** (instead of Access Policies)
+* “Purge Protection” defaults **ON**
+* “Soft Delete” is **always enabled**, cannot disable
+
+### **Recommendation**
+
+Use **RBAC + Managed Identity** (not Access Policies).
+
+---
+
+# 8️⃣ **Tests & Verification Scripts**
+
+### **Test: Get all secrets**
 
 ```bash
-az keyvault set-policy --name MyKeyVault --object-id <MANAGED_IDENTITY_OBJECT_ID> --secret-permissions get list
+az keyvault secret list --vault-name kv-demo-atul -o table
+```
+
+### **Test: Retrieve specific secret**
+
+```bash
+az keyvault secret show \
+  --vault-name kv-demo-atul \
+  --name dbPassword \
+  --query value -o tsv
+```
+
+### **Test: Using Managed Identity**
+
+```bash
+curl "http://169.254.169.254/metadata/identity/oauth2/token?resource=https://vault.azure.net&api-version=2018-02-01" \
+  -H Metadata:true
+```
+
+### **Test from Azure Pipeline**
+
+```yaml
+- script: |
+    if [ -z "$(dbPassword)" ]; then
+      echo "Secret Not Found!"
+      exit 1
+    else
+      echo "Secret Loaded Successfully!"
+    fi
 ```
 
 ---
 
-### **Summary**
-- Created an Azure Key Vault.
-- Added secrets and configured access policies.
-- Retrieved secrets in a Python or .NET application.
-- Secured access with Managed Identity.
+# 🎁 **BONUS: Key Vault Secrets in PowerShell Script**
 
-Let me know if you need further customization or help!
+```powershell
+$kvName = "kv-demo-atul"
+$secret = az keyvault secret show --vault-name $kvName --name dbPassword --query value -o tsv
+Write-Host "Secret value: $secret"
+```
+
+---
+
+# ✅ **Delivered:**
+
+✔ YAML Pipelines
+✔ ARM Template integration
+✔ Data Factory integration
+✔ Publishing secret as artifact
+✔ Variable groups
+✔ CLI + PowerShell
+✔ New UI updates
+✔ Test scripts
+
+---
