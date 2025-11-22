@@ -1,4 +1,4 @@
-# 🚀 **AZURE KEY VAULT – COMPLETE CODE & SNIPPET COLLECTION**
+# 🚀 **AZURE KEY VAULT 
 
 Includes:
 
