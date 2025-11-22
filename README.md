@@ -1,4 +1,4 @@
-# 🚀 **AZURE KEY VAULT 
+# AZURE KEY VAULT 
 
 Includes:
 
